@@ -649,6 +649,7 @@ class GeneralisedHyperbolic(LevyProcess):
         x_series, truncation_level = self.gig_process.simulate_jumps()
         # Simulate the variance-mean mixture:
         y_series = self.beta*x_series + np.sqrt(x_series)*np.random.randn(x_series.size)
+        # Residual approximation:
         residual_gaussians = self.residual_gaussian_sequence(truncation_level_gamma=truncation_level, truncation_level_TS=truncation_level, size=x_series.size)
         return y_series + residual_gaussians
 
@@ -663,4 +664,12 @@ class GeneralisedHyperbolic(LevyProcess):
             alpha = np.sqrt(self.gamma**2 + self.beta**2)
             return a(self.lam, alpha, self.beta, self.delta)*((self.delta**2+(x-mu)**2)**((self.lam-0.5)/2))*kv(self.lam-0.5, alpha*np.sqrt(self.delta**2+(x-mu)**2))*np.exp(self.beta*(x-mu))
 
+    def unit_expected_value(self):
+        return (self.delta * self.beta * kv(self.lam+1, self.delta*self.gamma)) / (self.gamma * kv(self.lam, self.delta*self.gamma))
+
+    def unit_variance(self):
+        return ((self.delta * kv(self.lam+1, self.delta*self.gamma)) / (self.gamma * kv(self.lam, self.delta*self.gamma)) 
+            + ((self.beta**2 * self.delta**2)/self.gamma**2) * ( (kv(self.lam+2, self.delta*self.gamma) / kv(self.lam, self.delta*self.gamma))
+            -  kv(self.lam+1, self.delta*self.gamma)**2 / kv(self.lam, self.delta*self.gamma)**2 )
+        )
 
