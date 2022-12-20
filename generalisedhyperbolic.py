@@ -291,8 +291,8 @@ class GeneralisedInverseGaussianProcess(LevyProcess):
             residual_expected_value = self.rate*self.tempered_stable_process.unit_expected_residual(x_series[-1])
             residual_variance = self.rate*self.tempered_stable_process.unit_variance_residual(x_series[-1])
             E_c = self.tolerance*x_series.sum()
-        residual_gaussians = self.residual_gaussian_sequence(truncation_level_gamma=truncation_level, truncation_level_TS=truncation_level, size=x_series.size)
-        return x_series + residual_gaussians
+
+        return x_series, truncation_level
 
     def simulate_series_setting_1(self, rate, M, gamma_0=0.0):
         gamma_sequence, x_series = self.tempered_stable_process.simulate_jumps(rate=rate, M=M, gamma_0=gamma_0)
@@ -653,11 +653,13 @@ class GeneralisedHyperbolic(LevyProcess):
         residual_gaussians = self.residual_gaussian_sequence(truncation_level_gamma=truncation_level, truncation_level_TS=truncation_level, size=x_series.size)
         return y_series + residual_gaussians
 
+
     def probability_density(self, x, mu=0.0):
-        if (self.gamma == 0):
-            # Symmetric student t density
-            nu = -2*self.lam
-            return gammafnc(0.5*(nu+1))/(np.sqrt(nu*np.pi)*gammafnc(0.5*nu))*np.power(1+(x**2)/nu, -0.5*(nu+1))
+        if (self.lam < 0) and (self.gamma == 0):
+            if self.beta:
+                return ((np.sqrt(2)*np.exp(self.beta*(x-mu)))/(np.sqrt(np.pi)*np.abs(self.beta)**(self.lam-0.5)))*((self.delta**2+(x-mu)**2)**((self.lam-0.5)/2))/((self.delta**(2*self.lam))*(2**(-self.lam))*gammafnc(-self.lam))*kv(self.lam-0.5, np.abs(self.beta)*np.sqrt(self.delta**2 + (x-mu)**2))
+            else:
+                return gammafnc(-self.lam+0.5)/(np.sqrt(np.pi*self.delta**2)*gammafnc(-self.lam))*np.power(1+((x-mu)**2)/(self.delta**2), self.lam-0.5)
         else:
             def a(lam, alpha, beta, delta):
                 return ((alpha**2-beta**2)**(lam/2))/(np.sqrt(2*np.pi)*(alpha**(lam-0.5))*(delta**lam)*kv(lam, delta*np.sqrt(alpha**2-beta**2)))
