@@ -274,7 +274,6 @@ class GeneralisedInverseGaussianProcess(LevyProcess):
             residual_variance = self.rate*self.pos_ext_gamma_process.unit_variance_residual(truncation_level)
             E_c = self.tolerance*x_series.sum()
         # We do not use residual approximation in this setting since Asmussen and Rosinski 2001 shows it is not valid for the gamma process.
-        # It is also likely not necessary since the jumps from a gamma process rapidly converge to zero.
         return x_series
 
     # Jump magnitude simulation:
@@ -424,7 +423,6 @@ class GeneralisedInverseGaussianProcess(LevyProcess):
         x_series = x_series[u < acceptance_prob]
         return gamma_sequence, x_series
 
-
     def simulate_adaptive_combined_series_setting_2(self):
         # Simulate jump magnitudes:
         gamma_sequence_N_Ga_1, x_series_N_Ga_1 = self.simulate_left_bounding_series_setting_2(rate=self.rate, M=self.M_gamma)
@@ -491,7 +489,6 @@ class GeneralisedInverseGaussianProcess(LevyProcess):
 
             E_c = self.tolerance*x_series.sum()
             itr += 1
-
 
         truncation_level = truncation_level_N2
         return x_series, truncation_level
@@ -655,7 +652,6 @@ class GeneralisedHyperbolic(LevyProcess):
         residual_gaussians = self.residual_gaussian_sequence(truncation_level_gamma=truncation_level, truncation_level_TS=truncation_level, size=x_series.size)
         return y_series + residual_gaussians
 
-
     def probability_density(self, x, mu=0.0):
         if (self.lam < 0) and (self.gamma == 0):
             if self.beta:
@@ -672,6 +668,15 @@ class GeneralisedHyperbolic(LevyProcess):
         return (self.delta * self.beta * kv(self.lam+1, self.delta*self.gamma)) / (self.gamma * kv(self.lam, self.delta*self.gamma))
 
     def unit_variance(self):
+        if (self.lam < 0) and (self.gamma == 0) and (self.beta == 0):
+            dof = -2*self.lam
+            if dof > 2:
+                return dof/(dof-2)
+            elif (dof <= 2) and (dof > 1):
+                return np.inf
+            else:
+                raise ValueError('The variance is undefined for this parameter setting.')
+
         return ((self.delta * kv(self.lam+1, self.delta*self.gamma)) / (self.gamma * kv(self.lam, self.delta*self.gamma)) 
             + ((self.beta**2 * self.delta**2)/self.gamma**2) * ( (kv(self.lam+2, self.delta*self.gamma) / kv(self.lam, self.delta*self.gamma))
             -  kv(self.lam+1, self.delta*self.gamma)**2 / kv(self.lam, self.delta*self.gamma)**2 )
