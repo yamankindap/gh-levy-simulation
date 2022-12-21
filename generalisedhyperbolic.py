@@ -183,9 +183,9 @@ class GeneralisedInverseGaussianProcess(LevyProcess):
 
     # Select simulation method and set corresponding parameters
     def _simulate_with_positive_extension(self):
-        x_series = self.simulate_Q_GIG()
+        x_series, truncation_level = self.simulate_Q_GIG()
         x_P_series = self.simulate_adaptive_positive_extension_series()
-        return np.concatenate((x_series, x_P_series))
+        return np.concatenate((x_series, x_P_series)), truncation_level
 
     def set_simulation_method(self, method=None):
         # Automatically select a method for simulation
@@ -227,6 +227,7 @@ class GeneralisedInverseGaussianProcess(LevyProcess):
 
                     self.simulate_Q_GIG = self.simulate_adaptive_combined_series_setting_1
                     if (self.lam > 0):
+                        print('An independent gamma process extension will be made.')
                         self.simulate_jumps = self._simulate_with_positive_extension
                     else:
                         self.simulate_jumps = self.simulate_Q_GIG
@@ -248,6 +249,7 @@ class GeneralisedInverseGaussianProcess(LevyProcess):
 
                 self.simulate_Q_GIG = self.simulate_adaptive_combined_series_setting_2
                 if (self.lam > 0):
+                    print('An independent gamma process extension will be made.')
                     self.simulate_jumps = self._simulate_with_positive_extension
                 else:
                     self.simulate_jumps = self.simulate_Q_GIG
