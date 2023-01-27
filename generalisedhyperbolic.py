@@ -137,7 +137,7 @@ class GeneralisedInverseGaussianProcess(LevyProcess):
         self.M_stable = M_stable
         self.pt = pt
 
-        self.max_iter = int(10000/5)
+        self.max_iter = 2000 # This can also be given as an argument.
 
         if tolerance is None:
             if self.abs_lam > 1:
