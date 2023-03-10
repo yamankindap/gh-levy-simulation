@@ -130,6 +130,7 @@ class GeneralisedInverseGaussianProcess(LevyProcess):
             self.pos_ext_gamma_process.set_parameters(beta, C)
 
         self.set_simulation_method()
+        self.set_residual_approximation_method()
 
     def set_simulation_parameters(self, rate, M_gamma, M_stable, tolerance, pt):
         self.rate = rate
@@ -146,6 +147,48 @@ class GeneralisedInverseGaussianProcess(LevyProcess):
                 self.tolerance = 0.01
         else:
             self.tolerance = tolerance
+
+    # Residual approximation module:
+    def _exact_residual_stats(self, truncation_level_gamma, truncation_level_TS):
+        residual_expected_value_GIG = self.rate*self.tempered_stable_process.unit_expected_residual(truncation_level_TS)
+        residual_variance_GIG = self.rate*self.tempered_stable_process.unit_variance_residual(truncation_level_TS)
+        return residual_expected_value_GIG, residual_variance_GIG
+    
+    def _lower_bound_residual_stats(self, truncation_level_gamma, truncation_level_TS):
+        residual_expected_value_GIG = self.rate*self.lb_gamma_process.unit_expected_residual(truncation_level_gamma) + self.rate*self.lb_tempered_stable_process.unit_expected_residual(truncation_level_TS)
+        residual_variance_GIG = self.rate*self.lb_gamma_process.unit_variance_residual(truncation_level_gamma) + self.rate*self.lb_tempered_stable_process.unit_variance_residual(truncation_level_TS)
+        return residual_expected_value_GIG, residual_variance_GIG
+
+    def set_residual_approximation_method(self):
+        if (self.abs_lam >= 0.5):
+            if (self.abs_lam == 0.5):
+                print('Residual approximation method is set to exact method.')
+                self.residual_stats = self._exact_residual_stats
+            else:
+                # Initialise the lower bounding point processes for residual approximation
+                print('Residual approximation method is set to lower bounding method.')
+                z0 = self.cornerpoint()
+                H0 = z0*self.H_squared(z0)
+                C_gamma_B = z0/((np.pi**2)*H0*self.abs_lam)
+                beta_gamma_B = 0.5*self.gamma**2 + (self.abs_lam/(1+self.abs_lam))*(z0**2)/(2*self.delta**2)
+                self.lb_gamma_process = GammaProcess(beta_gamma_B, C_gamma_B)
+                beta_0 = 1.95 # This parameter value can be optimised further in the future...
+                C_TS_B = (2*self.delta*np.sqrt(np.e)*np.sqrt(beta_0-1))/((np.pi**2)*H0*beta_0)
+                beta_TS_B = 0.5*self.gamma**2 + (beta_0*z0**2)/(2*self.delta**2)
+                self.lb_tempered_stable_process = TemperedStableProcess(0.5, beta_TS_B, C_TS_B)
+                # Select the appropriate residual_gaussian_sequence() function
+                self.residual_stats = self._lower_bound_residual_stats
+        else:
+            print('Residual approximation method is set to lower bounding method.')
+            z1 = self.cornerpoint()
+            C_gamma_A = z1/(2*np.pi*self.abs_lam)
+            beta_gamma_A = 0.5*self.gamma**2 + (self.abs_lam/(1+self.abs_lam))*(z1**2)/(2*self.delta**2)
+            self.lb_gamma_process = GammaProcess(beta_gamma_A, C_gamma_A)
+            beta_0 = 1.95 # This parameter value can be optimised further in the future...
+            C_TS_A = (self.delta*np.sqrt(np.e)*np.sqrt(beta_0-1))/(np.pi*beta_0)
+            beta_TS_A = 0.5*self.gamma**2 + (beta_0*z1**2)/(2*self.delta**2)
+            self.lb_tempered_stable_process = TemperedStableProcess(0.5, beta_TS_A, C_TS_A)
+            self.residual_stats = self._lower_bound_residual_stats
 
     # Auxiliary functionality
     def cornerpoint(self):
@@ -334,7 +377,8 @@ class GeneralisedInverseGaussianProcess(LevyProcess):
         selection = np.argmax([truncation_level_N_Ga_1, truncation_level_N_Ga_2, truncation_level_N2])
 
         # Adaptive simulation:
-        E_c = self.tolerance*x_series.sum()
+        _mean_lower_bound, _var_lower_bound = self.residual_stats(truncation_level_gamma=truncation_level_N2, truncation_level_TS=truncation_level_N2)
+        E_c = self.tolerance*x_series.sum() + _mean_lower_bound
         itr = 1
         while (residual_variance/((E_c - residual_expected_value)**2) > self.pt) or (E_c < residual_expected_value):
             
@@ -372,7 +416,8 @@ class GeneralisedInverseGaussianProcess(LevyProcess):
 
             selection = np.argmax([truncation_level_N_Ga_1, truncation_level_N_Ga_2, truncation_level_N2])
 
-            E_c = self.tolerance*x_series.sum()
+            _mean_lower_bound, _var_lower_bound = self.residual_stats(truncation_level_gamma=truncation_level_N2, truncation_level_TS=truncation_level_N2)
+            E_c = self.tolerance*x_series.sum() + _mean_lower_bound
             itr += 1
 
         truncation_level = truncation_level_N2
@@ -449,7 +494,8 @@ class GeneralisedInverseGaussianProcess(LevyProcess):
         selection = np.argmax([truncation_level_N_Ga_1, truncation_level_N_Ga_2, truncation_level_N2])
 
         # Adaptive simulation:
-        E_c = self.tolerance*x_series.sum()
+        _mean_lower_bound, _var_lower_bound = self.residual_stats(truncation_level_gamma=truncation_level_N2, truncation_level_TS=truncation_level_N2)
+        E_c = self.tolerance*x_series.sum() + _mean_lower_bound
         itr = 1
         while (residual_variance/((E_c - residual_expected_value)**2) > self.pt) or (E_c < residual_expected_value):
             
@@ -487,7 +533,8 @@ class GeneralisedInverseGaussianProcess(LevyProcess):
 
             selection = np.argmax([truncation_level_N_Ga_1, truncation_level_N_Ga_2, truncation_level_N2])
 
-            E_c = self.tolerance*x_series.sum()
+            _mean_lower_bound, _var_lower_bound = self.residual_stats(truncation_level_gamma=truncation_level_N2, truncation_level_TS=truncation_level_N2)
+            E_c = self.tolerance*x_series.sum() + _mean_lower_bound
             itr += 1
 
         truncation_level = truncation_level_N2
@@ -545,7 +592,7 @@ class GeneralisedInverseGaussianProcess(LevyProcess):
 
 class GeneralisedHyperbolic(LevyProcess):
 
-    def __init__(self, lam, gamma, delta, beta, sigma, rate=1.0, M_gamma=10, M_stable=100, tolerance=None, pt=0.05):
+    def __init__(self, lam, gamma, delta, beta, sigma, rate=1.0, M_gamma=10, M_stable=100, tolerance=None, pt=0.05, residual_mode=None):
         # Input metrics:
         self.lam = lam
         self.gamma = gamma
@@ -570,7 +617,8 @@ class GeneralisedHyperbolic(LevyProcess):
                                                              pt=self.pt)
 
         # Residual approximation:
-        self.set_residual_approximation_method()
+        self.set_residual_approximation_method(residual_mode)
+
 
     def set_simulation_parameters(self, rate, M_gamma, M_stable, tolerance, pt):
         self.rate = rate
@@ -594,54 +642,34 @@ class GeneralisedHyperbolic(LevyProcess):
         return gh_sample
 
     # Residual approximation module
-    def _simulate_exact(self, truncation_level_gamma, truncation_level_TS, size): # Here we're not using truncation_level_gamma argument...
-        residual_expected_value_GIG = self.rate*self.gig_process.tempered_stable_process.unit_expected_residual(truncation_level_TS)
-        residual_variance_GIG = self.rate*self.gig_process.tempered_stable_process.unit_variance_residual(truncation_level_TS)
-        #residual_gaussian = np.random.normal(loc=residual_expected_value_GIG, scale=np.sqrt(residual_variance_GIG))
-        residual_expected_value_GH = (self.beta*residual_expected_value_GIG)/size
-        residual_variance_GH = ((self.beta**2)*residual_variance_GIG + (self.sigma**2)*residual_expected_value_GIG)/size
-        residual_gaussians = np.random.normal(loc=residual_expected_value_GH, scale=np.sqrt(residual_variance_GH), size=size)
+    def residual_stats(self, truncation_level_gamma, truncation_level_TS):
+        residual_expected_value_GIG , residual_variance_GIG = self.gig_process.residual_stats(truncation_level_gamma, truncation_level_TS)
+        residual_expected_value_GH = (self.beta*residual_expected_value_GIG)
+        residual_variance_GH = ((self.beta**2)*residual_variance_GIG + (self.sigma**2)*residual_expected_value_GIG)
+        return residual_expected_value_GH, residual_variance_GH
+    
+    def simulate_residual_gaussians(self, truncation_level_gamma, truncation_level_TS, size):
+        R_mu, R_var = self.residual_stats(truncation_level_gamma, truncation_level_TS)
+        residual_gaussians = np.random.normal(loc=R_mu/size, scale=np.sqrt(R_var/size), size=size)
         return residual_gaussians
 
-    def _simulate_lower_bound(self, truncation_level_gamma, truncation_level_TS, size):
-        residual_expected_value_GIG = self.rate*self.lb_gamma_process.unit_expected_residual(truncation_level_gamma) + self.rate*self.lb_tempered_stable_process.unit_expected_residual(truncation_level_TS)
-        residual_variance_GIG = self.rate*self.lb_gamma_process.unit_variance_residual(truncation_level_gamma) + self.rate*self.lb_tempered_stable_process.unit_variance_residual(truncation_level_TS)
-        #residual_gaussian = np.random.normal(loc=residual_expected_value_GIG, scale=np.sqrt(residual_variance_GIG))
-        residual_expected_value_GH = (self.beta*residual_expected_value_GIG)/size
-        residual_variance_GH = ((self.beta**2)*residual_variance_GIG + (self.sigma**2)*residual_expected_value_GIG)/size
-        residual_gaussians = np.random.normal(loc=residual_expected_value_GH, scale=np.sqrt(residual_variance_GH), size=size)
+    def simulate_residual_drift(self, truncation_level_gamma, truncation_level_TS, size):
+        R_mu, R_var = self.residual_stats(truncation_level_gamma, truncation_level_TS)
+        residual_gaussians = np.random.normal(loc=R_mu/size, scale=0, size=size)
         return residual_gaussians
 
-    def set_residual_approximation_method(self):
-        if (self.abs_lam >= 0.5):
-            if (self.abs_lam == 0.5):
-                print('Residual approximation method is set to exact method.')
-                self.residual_gaussian_sequence = self._simulate_exact
-            else:
-                # Initialise the lower bounding point processes for residual approximation
-                print('Residual approximation method is set to lower bounding method.')
-                z0 = self.gig_process.cornerpoint()
-                H0 = z0*self.gig_process.H_squared(z0)
-                C_gamma_B = z0/((np.pi**2)*H0*self.abs_lam)
-                beta_gamma_B = 0.5*self.gamma**2 + (self.abs_lam/(1+self.abs_lam))*(z0**2)/(2*self.delta**2)
-                self.lb_gamma_process = GammaProcess(beta_gamma_B, C_gamma_B)
-                beta_0 = 1.95 # This parameter value can be optimised further in the future...
-                C_TS_B = (2*self.delta*np.sqrt(np.e)*np.sqrt(beta_0-1))/((np.pi**2)*H0*beta_0)
-                beta_TS_B = 0.5*self.gamma**2 + (beta_0*z0**2)/(2*self.delta**2)
-                self.lb_tempered_stable_process = TemperedStableProcess(0.5, beta_TS_B, C_TS_B)
-                # Select the appropriate residual_gaussian_sequence() function
-                self.residual_gaussian_sequence = self._simulate_lower_bound
+    def set_residual_approximation_method(self, mode):
+        if mode is None:
+            print('Residual approximation mode is set to add the expected residual value.')
+            self.simulate_residual = self.simulate_residual_drift
+        elif mode == 'mean-only':
+            print('Residual approximation mode is set to add the expected residual value.')
+            self.simulate_residual = self.simulate_residual_drift
+        elif mode == 'Gaussian':
+            print('Residual approximation mode is set to Gaussian approximation.')
+            self.simulate_residual = self.simulate_residual_gaussians
         else:
-            print('Residual approximation method is set to lower bounding method.')
-            z1 = self.gig_process.cornerpoint()
-            C_gamma_A = z1/(2*np.pi*self.abs_lam)
-            beta_gamma_A = 0.5*self.gamma**2 + (self.abs_lam/(1+self.abs_lam))*(z1**2)/(2*self.delta**2)
-            self.lb_gamma_process = GammaProcess(beta_gamma_A, C_gamma_A)
-            beta_0 = 1.95 # This parameter value can be optimised further in the future...
-            C_TS_A = (self.delta*np.sqrt(np.e)*np.sqrt(beta_0-1))/(np.pi*beta_0)
-            beta_TS_A = 0.5*self.gamma**2 + (beta_0*z1**2)/(2*self.delta**2)
-            self.lb_tempered_stable_process = TemperedStableProcess(0.5, beta_TS_A, C_TS_A)
-            self.residual_gaussian_sequence = self._simulate_lower_bound
+            raise ValueError('The mode can only be set to `mean-only` or `Gaussian`.')
 
     def simulate_jumps(self):
         # Simulate the subordinator process (GIG):
@@ -649,7 +677,7 @@ class GeneralisedHyperbolic(LevyProcess):
         # Simulate the variance-mean mixture:
         y_series = self.beta*x_series + np.sqrt(x_series)*np.random.randn(x_series.size)
         # Residual approximation:
-        residual_gaussians = self.residual_gaussian_sequence(truncation_level_gamma=truncation_level, truncation_level_TS=truncation_level, size=x_series.size)
+        residual_gaussians = self.simulate_residual(truncation_level_gamma=truncation_level, truncation_level_TS=truncation_level, size=x_series.size)
         return y_series + residual_gaussians
 
     def probability_density(self, x, mu=0.0):
