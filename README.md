@@ -1,3 +1,4 @@
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 # gh-levy-simulation
 A Python simulation algorithm for the generalised hyperbolic process based on point process simulation methods.
 
